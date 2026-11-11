@@ -1,0 +1,45 @@
+isc_options:
+  domain-name:
+    jag-name: v4DomainNameOption
+    jag-type: domainName
+    list: false
+  domain-name-servers: 
+    jag-name: v4DomainServersOption
+    jag-type: ipAddressList
+    list: true
+  routers:
+    jag-name: v4RoutersOption
+    jag-type: ipAddressList
+    list: true
+  subnet-mask:
+    jag-name: v4SubnetMaskOption
+    jag-type: ipAddress
+    list: false
+  time-offset:
+    jag-name: v4TimeOffsetOption
+    jag-type: unsignedInt
+    list: false
+  time-servers:
+    jag-name: v4TimeServersOption
+    jag-type: ipAddressList
+    list: true
+  ntp-servers:
+    jag-name: v4TimeServersOption
+    jag-type: ipAddressList
+    list: true
+  netbios-name-servers:
+    jag-name: v4NetbiosNameServersOption
+    jag-type: ipAddressList
+    list: true
+  netbios-node-type:
+    jag-name: v4NetbiosNodeTypeOption
+    jag-type: unsignedByte
+    list: false
+  tftp-server-name:
+    jag-name: v4TftpServerNameOption
+    jag-type: string
+    list: false
+  bootfile-name:
+    jag-name: v4BootFileNameOption
+    jag-type: string
+    list: false

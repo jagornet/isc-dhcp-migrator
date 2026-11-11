@@ -1,0 +1,183 @@
+{%- macro policy(indent, name, value) %}
+{{ indent }}- name: {{ name }}
+{{ indent }}  value: {{ value }}
+{% endmacro -%}
+
+{%- macro option(indent, name, type, value) %}
+{{ indent }}{{ name }}:
+{{ indent }}  {{ type }}: {{ value }}
+{% endmacro -%}
+
+{%- macro option_list(indent, name, type, value_list) %}
+{{ indent }}{{ name }}:
+{{ indent }}  {{ type }}:
+{%- for value in value_list %}
+{{ indent }}    - {{ value }}
+{%- endfor -%}
+{% endmacro -%}
+
+{%- macro pool(pool) %}
+          - range: {{ pool.range }}
+
+            {%- if pool.policies is defined and pool.policies|length > 0 %}
+            policies:
+              # Pool level policies
+              policyList:
+                {%- for pp in pool.policies -%}
+                {{ policy('          ', pp.name, pp.value) }}
+                {%- endfor -%}
+            {% endif -%}
+
+            {%- set pool_opts = pool.v4options if pool.v4options is defined else pool.options -%}
+            {%- if pool_opts is defined and pool_opts|length > 0 %}
+            # pool options are constrained to the type of pool:
+            # configOptions = [v4ConfigOptions | v6MsgConfigOptions | ... ]
+            configOptions:
+              {%- for op in pool_opts -%}
+                {%- if op.list is defined and op.list -%}
+                  {{ option_list('        ', op.name, op.type, op.value) }}
+                {%- else -%}
+                  {{ option('        ', op.name, op.type, op.value) }}
+                {%- endif -%}
+              {%- endfor -%}
+            {% endif -%}
+{% endmacro -%}
+
+{%- macro binding(binding) %}
+          - ipAddress: {{ binding.ipaddr }}
+            chaddr: {{ binding.hwaddr }}
+
+            {%- if binding.policies is defined and binding.policies|length > 0 %}
+            policies:
+              # Binding level policies
+              policyList:
+                {%- for pp in binding.policies -%}
+                {{ policy('          ', pp.name, pp.value) }}
+                {%- endfor -%}
+            {% endif -%}
+
+            {%- set binding_opts = binding.v4options if binding.v4options is defined else binding.options -%}
+            {%- if binding_opts is defined and binding_opts|length > 0 %}
+            # binding options are constrained to the type of binding:
+            # configOptions = [v4ConfigOptions | v6MsgConfigOptions | ... ]
+            configOptions:
+              {%- for op in binding_opts -%}
+                {%- if op.list is defined and op.list -%}
+                  {{ option_list('        ', op.name, op.type, op.value) }}
+                {%- else -%}
+                  {{ option('        ', op.name, op.type, op.value) }}
+                {%- endif -%}
+              {%- endfor -%}
+            {% endif -%}
+{% endmacro -%}
+
+{%- macro link(link) %}
+    - name: {{ link.name }}
+      {%- if link.interface is defined %}
+      interface: {{ link.interface }}
+      {%- else %}
+      address: {{ link.address }}
+      {%- endif -%}
+
+      {%- if link.policies is defined and link.policies|length > 0 %}
+      policies:
+        # Link level policies
+        policyList:
+          {%- for lp in link.policies -%}
+          {{ policy('          ', lp.name, lp.value) }}
+          {%- endfor -%}
+      {% endif -%}
+
+      {%- if link.v4options is defined and link.v4options|length > 0 %}
+      v4ConfigOptions:
+        {%- for v4op in link.v4options -%}
+          {%- if v4op.list is defined and v4op.list -%}
+            {{ option_list('        ', v4op.name, v4op.type, v4op.value) }}
+          {%- else -%}
+            {{ option('        ', v4op.name, v4op.type, v4op.value) }}
+          {%- endif -%}
+        {%- endfor -%}
+      {% endif -%}
+
+      {%- if link.v6msgoptions is defined and link.v6msgoptions|length > 0 %}
+      v6MsgConfigOptions:
+        {%- for v6op in link.v6msgoptions -%}
+          {%- if v6op.list is defined and v6op.list -%}
+            {{ option_list('        ', v6op.name, v6op.type, v6op.value) }}
+          {%- else -%}
+            {{ option('        ', v6op.name, v6op.type, v6op.value) }}
+          {%- endif -%}
+        {%- endfor -%}
+      {% endif -%}
+
+      {%- if link.v4pools is defined and link.v4pools|length > 0 %}
+      v4AddrPools:
+        poolList:
+          {%- for v4pool in link.v4pools -%}
+          {{ pool(v4pool) }}
+          {%- endfor -%}
+      {% endif -%}
+
+      {%- if link.v4addrbindings is defined and link.v4addrbindings|length > 0 %}
+      v4AddrBindings:
+        bindingList:
+          {%- for v4addrbinding in link.v4addrbindings -%}
+          {{ binding(v4addrbinding) }}
+          {%- endfor -%}
+      {% endif -%}
+{% endmacro -%}
+
+{%- macro filter(indent, name, filter) %}
+{{ indent }}- name: {{ name }}
+{{ indent }}  filterExpressions:
+{{ indent }}    filterExpressionList:
+{% endmacro -%}
+---
+
+{%- if global_policies is defined and global_policies|length > 0 %}
+policies:
+  # Global server level policies
+  policyList:
+    {%- for gp in global_policies -%}
+    {{ policy('    ', gp.name, gp.value) }}
+    {%- endfor -%}
+{% endif -%}
+
+{%- if global_v4options is defined and global_v4options|length > 0 %}
+v4ConfigOptions:
+  {%- for v4op in global_v4options -%}
+    {%- if v4op.list is defined and v4op.list -%}
+      {{ option_list('  ', v4op.name, v4op.type, v4op.value) }}
+    {%- else -%}
+      {{ option('  ', v4op.name, v4op.type, v4op.value) }}
+    {%- endif -%}
+  {%- endfor -%}
+{% endif -%}
+
+{%- if global_v6msgoptions is defined and global_v6msgoptions|length > 0 %}
+v6MsgConfigOptions:
+  {%- for v6op in global_v6msgoptions -%}
+    {%- if v6op.list is defined and v6op.list -%}
+      {{ option_list('  ', v6op.name, v6op.type, v6op.value) }}
+    {%- else -%}
+      {{ option('  ', v6op.name, v6op.type, v6op.value) }}
+    {%- endif -%}
+  {%- endfor -%}
+{% endif -%}
+
+{%- if global_filters is defined and global_filters|length > 0 %}
+filters:
+  # Global server level filters applied to all clients that match
+  filterList:
+    {%- for gf in global_filters -%}
+    {{ filter('    ', gf.name, gf.value) }}
+    {%- endfor -%}
+{% endif -%}
+
+{%- if global_links is defined and global_links|length > 0 %}
+links:
+  linkList:
+    {%- for gl in global_links %}
+    {{ link(gl) }}
+    {%- endfor -%}
+{% endif %}

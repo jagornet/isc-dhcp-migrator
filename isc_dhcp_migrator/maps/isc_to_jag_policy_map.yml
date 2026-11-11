@@ -1,0 +1,11 @@
+isc_policies:
+  default-lease-time:
+    jag-name: v4.defaultLeasetime
+  max-lease-time:
+    jag-name: v4.defaultLeasetime
+  filename: 
+    jag-name: v4.header.filename
+  server-name:
+    jag-name: v4.header.sname
+  ping-timeout:
+    jag-name: v4.pingCheckTimeout
