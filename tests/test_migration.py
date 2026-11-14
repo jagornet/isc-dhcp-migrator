@@ -72,6 +72,22 @@ class TestIscDhcpMigrator(unittest.TestCase):
                 self.assertIn('bindingList', link['v4AddrBindings'])
         self.assertTrue(found_bindings, "v4AddrBindings should be present in at least one link")
 
+        # Quoted strings in dhcpd.conf should be unquoted in YAML data
+        domain_opt = parsed['v4ConfigOptions']['v4DomainNameOption']['domainName']
+        self.assertEqual(domain_opt, 'example.org')
+
+        # Numeric policy values should serialize as ints
+        lease_policy = parsed['policies']['policyList'][0]
+        self.assertIsInstance(lease_policy['value'], int)
+
+    def test_render_valid_json(self):
+        import json
+        rendered = self.converter.render(output_format='json')
+        parsed = json.loads(rendered)
+        self.assertIn('links', parsed)
+        self.assertIn('policies', parsed)
+        self.assertIn('v4ConfigOptions', parsed)
+
 
 if __name__ == '__main__':
     unittest.main()

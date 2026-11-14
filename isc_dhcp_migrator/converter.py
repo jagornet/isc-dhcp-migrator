@@ -1,10 +1,10 @@
-import jinja2
+import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import netaddr
 import yaml
 
-from .parser import IscDhcpdConf, IscDhcpdConfParser
+from .parser import IscDhcpdConf
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 
@@ -33,8 +33,6 @@ HOST = 'host'
 class IscToJagConfigConverter:
     DEFAULT_POLICY_MAP = PACKAGE_DIR / 'maps' / 'isc_to_jag_policy_map.yml'
     DEFAULT_OPTION_MAP = PACKAGE_DIR / 'maps' / 'isc_to_jag_option_map.yml'
-    DEFAULT_TEMPLATE_DIR = PACKAGE_DIR / 'templates'
-    DEFAULT_TEMPLATE_FILE = 'jagornet_dhcpserver_config.yml.j2'
 
     def __init__(
         self,
@@ -180,17 +178,103 @@ class IscToJagConfigConverter:
                 self.map_v4options(isc_host.options, jag_binding[V4OPTIONS])
                 target_link[V4ADDRBINDINGS].append(jag_binding)
 
-    def render(self, template_dir: Optional[Path] = None, template_name: Optional[str] = None) -> str:
-        t_dir = template_dir or self.DEFAULT_TEMPLATE_DIR
-        t_name = template_name or self.DEFAULT_TEMPLATE_FILE
+    @staticmethod
+    def _normalize_value(val: Any) -> Any:
+        """Convert netaddr objects and quoted/numeric strings into plain YAML-safe primitives."""
+        if isinstance(val, (netaddr.IPAddress, netaddr.IPNetwork, netaddr.IPRange)):
+            return str(val)
+        if isinstance(val, str):
+            stripped = val.strip()
+            if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ('"', "'"):
+                return stripped[1:-1]
+            if stripped.isdigit():
+                return int(stripped)
+            return stripped
+        return val
 
-        jag_config = self.map_config()
+    def _build_policy_list(self, policies: List[Dict]) -> List[Dict]:
+        return [
+            {NAME: p[NAME], VALUE: self._normalize_value(p[VALUE])}
+            for p in policies
+        ]
 
-        fsloader = jinja2.FileSystemLoader(searchpath=str(t_dir))
-        env = jinja2.Environment(loader=fsloader)
-        template = env.get_template(t_name)
-        return template.render(
-            global_policies=jag_config[POLICIES],
-            global_v4options=jag_config[V4OPTIONS],
-            global_links=jag_config[LINKS]
+    def _build_options_dict(self, options: List[Dict]) -> Dict:
+        opts_dict = {}
+        for opt in options:
+            val = opt[VALUE]
+            if isinstance(val, list):
+                norm_val = [self._normalize_value(v) for v in val]
+            else:
+                norm_val = self._normalize_value(val)
+            opts_dict[opt[NAME]] = {opt[TYPE]: norm_val}
+        return opts_dict
+
+    def _build_pool(self, pool: Dict) -> Dict:
+        pool_dict: Dict[str, Any] = {
+            RANGE: str(pool[RANGE])
+        }
+        if pool.get(POLICIES):
+            pool_dict[POLICIES] = {'policyList': self._build_policy_list(pool[POLICIES])}
+        if pool.get(V4OPTIONS):
+            pool_dict['configOptions'] = self._build_options_dict(pool[V4OPTIONS])
+        return pool_dict
+
+    def _build_binding(self, binding: Dict) -> Dict:
+        binding_dict: Dict[str, Any] = {
+            'ipAddress': self._normalize_value(binding['ipaddr']),
+            'chaddr': self._normalize_value(binding['hwaddr']),
+        }
+        if binding.get(POLICIES):
+            binding_dict[POLICIES] = {'policyList': self._build_policy_list(binding[POLICIES])}
+        if binding.get(V4OPTIONS):
+            binding_dict['configOptions'] = self._build_options_dict(binding[V4OPTIONS])
+        return binding_dict
+
+    def _build_link(self, link: Dict) -> Dict:
+        link_dict: Dict[str, Any] = {
+            NAME: link[NAME],
+        }
+        if 'interface' in link:
+            link_dict['interface'] = link['interface']
+        else:
+            link_dict[ADDRESS] = str(link[ADDRESS])
+
+        if link.get(POLICIES):
+            link_dict[POLICIES] = {'policyList': self._build_policy_list(link[POLICIES])}
+        if link.get(V4OPTIONS):
+            link_dict['v4ConfigOptions'] = self._build_options_dict(link[V4OPTIONS])
+        if link.get(V4POOLS):
+            link_dict['v4AddrPools'] = {
+                'poolList': [self._build_pool(p) for p in link[V4POOLS]]
+            }
+        if link.get(V4ADDRBINDINGS):
+            link_dict['v4AddrBindings'] = {
+                'bindingList': [self._build_binding(b) for b in link[V4ADDRBINDINGS]]
+            }
+        return link_dict
+
+    def build_jagornet_schema(self, jag_config: Optional[Dict] = None) -> Dict:
+        """Build a plain Python dict matching the Jagornet DHCP server config schema."""
+        config = jag_config if jag_config is not None else self.map_config()
+        schema: Dict[str, Any] = {}
+
+        if config.get(POLICIES):
+            schema[POLICIES] = {'policyList': self._build_policy_list(config[POLICIES])}
+        if config.get(V4OPTIONS):
+            schema['v4ConfigOptions'] = self._build_options_dict(config[V4OPTIONS])
+        if config.get(LINKS):
+            schema[LINKS] = {'linkList': [self._build_link(l) for l in config[LINKS]]}
+
+        return schema
+
+    def render(self, output_format: str = 'yaml') -> str:
+        """Render the Jagornet configuration as YAML (default) or JSON."""
+        schema = self.build_jagornet_schema()
+        if output_format.lower() == 'json':
+            return json.dumps(schema, indent=2)
+        return yaml.safe_dump(
+            schema,
+            sort_keys=False,
+            default_flow_style=False,
+            explicit_start=True
         )
